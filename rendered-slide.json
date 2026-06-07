@@ -1,0 +1,179 @@
+{
+  "type" : "RenderedDeck",
+  "size" : {
+    "width" : 1280,
+    "height" : 720
+  },
+  "slides" : [ {
+    "id" : "slide-1",
+    "type" : "RenderedSlide",
+    "objects" : [ {
+      "id" : "title-1",
+      "type" : "text",
+      "text" : "Why AI Slide Iteration Breaks",
+      "bounds" : {
+        "x" : 60,
+        "y" : 40,
+        "w" : 520,
+        "h" : 60
+      },
+      "style" : {
+        "fontSize" : 34,
+        "fontWeight" : 700,
+        "color" : "#0B3D91"
+      }
+    }, {
+      "id" : "bul-1",
+      "type" : "bullets",
+      "items" : [ "Layout drift from partial updates", "Inconsistent design rules across iterations" ],
+      "bounds" : {
+        "x" : 750,
+        "y" : 160,
+        "w" : 420,
+        "h" : 220
+      },
+      "style" : {
+        "fontSize" : 22,
+        "color" : "#1A73E8"
+      }
+    }, {
+      "id" : "rect-yellow",
+      "type" : "rect",
+      "bounds" : {
+        "x" : 160,
+        "y" : 245,
+        "w" : 220,
+        "h" : 130
+      },
+      "style" : {
+        "fillColor" : "#FFD84D",
+        "strokeColor" : "#B8860B",
+        "strokeWidth" : 3
+      }
+    }, {
+      "id" : "circle-blue",
+      "type" : "circle",
+      "bounds" : {
+        "x" : 500,
+        "y" : 220,
+        "w" : 160,
+        "h" : 160
+      },
+      "style" : {
+        "fillColor" : "#4D8BFF",
+        "strokeColor" : "#1B3F8A",
+        "strokeWidth" : 3
+      }
+    }, {
+      "id" : "arrow-rect-to-circle",
+      "type" : "arrow",
+      "bounds" : {
+        "x" : 260,
+        "y" : 270,
+        "w" : 380,
+        "h" : 110
+      },
+      "style" : {
+        "strokeColor" : "#1A73E8",
+        "strokeWidth" : 4
+      }
+    } ]
+  }, {
+    "id" : "slide-2",
+    "type" : "RenderedSlide",
+    "objects" : [ {
+      "id" : "slide2-title",
+      "type" : "text",
+      "text" : "1) Layout drift from partial updates",
+      "bounds" : {
+        "x" : 60,
+        "y" : 40,
+        "w" : 560,
+        "h" : 50
+      },
+      "style" : {
+        "fontSize" : 28,
+        "fontWeight" : 700,
+        "color" : "#0B3D91"
+      }
+    }, {
+      "id" : "matrix-2x2",
+      "type" : "matrix",
+      "rows" : [ [ "Edits move objects incrementally, not as a whole", "Text reflow changes bounds and spacing" ], [ "Constraints are violated (alignment, margins)", "Small differences compound across iterations" ] ],
+      "bounds" : {
+        "x" : 140,
+        "y" : 160,
+        "w" : 760,
+        "h" : 360
+      },
+      "style" : {
+        "fillColor" : "#FFFFFF",
+        "strokeColor" : "#6B7C93",
+        "strokeWidth" : 2
+      }
+    }, {
+      "id" : "slide2-note",
+      "type" : "text",
+      "text" : "Result: each “improvement” subtly breaks the previous version.",
+      "bounds" : {
+        "x" : 60,
+        "y" : 560,
+        "w" : 740,
+        "h" : 40
+      },
+      "style" : {
+        "fontSize" : 20,
+        "color" : "#1A73E8"
+      }
+    } ]
+  }, {
+    "id" : "slide-3",
+    "type" : "RenderedSlide",
+    "objects" : [ {
+      "id" : "slide3-title",
+      "type" : "text",
+      "text" : "2) Inconsistent design rules across iterations",
+      "bounds" : {
+        "x" : 60,
+        "y" : 40,
+        "w" : 640,
+        "h" : 50
+      },
+      "style" : {
+        "fontSize" : 28,
+        "fontWeight" : 700,
+        "color" : "#0B3D91"
+      }
+    }, {
+      "id" : "comparison-table",
+      "type" : "table",
+      "headers" : [ "What changes", "What you expect", "What happens" ],
+      "rows" : [ [ "What changes", "What you expect", "What happens" ], [ "Typography & spacing", "Stable grid, consistent scale", "Fonts/sizes drift; margins widen/narrow" ], [ "Hierarchy & color", "Same emphasis and contrast targets", "Emphasis flips; inconsistent colors reduce readability" ] ],
+      "bounds" : {
+        "x" : 150,
+        "y" : 140,
+        "w" : 980,
+        "h" : 420
+      },
+      "style" : {
+        "fillColor" : "#FFFFFF",
+        "strokeColor" : "#6B7C93",
+        "strokeWidth" : 2
+      }
+    }, {
+      "id" : "slide3-note",
+      "type" : "text",
+      "text" : "Result: the slide’s “system” loses coherence after repeated generations.",
+      "bounds" : {
+        "x" : 60,
+        "y" : 590,
+        "w" : 900,
+        "h" : 40
+      },
+      "style" : {
+        "fontSize" : 20,
+        "color" : "#1A73E8"
+      }
+    } ]
+  } ]
+}
