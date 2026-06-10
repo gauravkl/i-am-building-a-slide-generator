@@ -37,7 +37,7 @@ class OpenAiSlideAstClientTest {
         assertEquals("Slide", request.path("text").path("format").path("schema").path("properties").path("slides").path("items").path("properties").path("type").path("const").asText());
         JsonNode componentSchema = request.path("text").path("format").path("schema").path("properties").path("slides").path("items").path("properties").path("components").path("items");
         assertTrue(componentSchema.path("anyOf").isArray());
-        assertEquals(7, componentSchema.path("anyOf").size());
+        assertEquals(9, componentSchema.path("anyOf").size());
 
         JsonNode textComponent = componentSchema.path("anyOf").get(0);
         assertEquals("text", textComponent.path("properties").path("type").path("const").asText());
@@ -53,6 +53,24 @@ class OpenAiSlideAstClientTest {
         assertEquals("table", tableComponent.path("properties").path("type").path("const").asText());
         assertEquals("array", tableComponent.path("properties").path("headers").path("type").asText());
         assertEquals("array", tableComponent.path("properties").path("rows").path("type").asText());
+
+        JsonNode imageComponent = componentSchema.path("anyOf").get(7);
+        assertEquals("image", imageComponent.path("properties").path("type").path("const").asText());
+        assertEquals("string", imageComponent.path("properties").path("imagePrompt").path("type").asText());
+        assertEquals("null", imageComponent.path("properties").path("src").path("type").asText());
+        assertEquals("string", imageComponent.path("properties").path("alt").path("type").asText());
+        assertTrue(imageComponent.path("required").toString().contains("imagePrompt"));
+
+        JsonNode chartComponent = componentSchema.path("anyOf").get(8);
+        assertEquals("chart", chartComponent.path("properties").path("type").path("const").asText());
+        assertEquals("bar", chartComponent.path("properties").path("chartType").path("const").asText());
+        assertEquals("array", chartComponent.path("properties").path("labels").path("type").asText());
+        assertEquals("array", chartComponent.path("properties").path("values").path("type").asText());
+        assertTrue(chartComponent.path("required").toString().contains("chartType"));
+        assertTrue(chartComponent.path("required").toString().contains("labels"));
+        assertTrue(chartComponent.path("required").toString().contains("values"));
+        assertEquals("null", textComponent.path("properties").path("chartType").path("type").asText());
+        assertEquals("null", imageComponent.path("properties").path("labels").path("type").asText());
     }
 
     @Test

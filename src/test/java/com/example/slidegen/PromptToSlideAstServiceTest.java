@@ -76,6 +76,44 @@ class PromptToSlideAstServiceTest {
     }
 
     @Test
+    void endToEndGeneratesImageAssetsAndWritesReferences() throws Exception {
+        RecordingImageGeneratorClient imageClient = new RecordingImageGeneratorClient(new byte[]{1, 2, 3, 4});
+        PromptToSlideAstService service = service(prompt -> imageDeck(), imageClient);
+        Path samplePath = tempDir.resolve("sample-slide.json");
+        Path renderedPath = tempDir.resolve("rendered-slide.json");
+        Path htmlPath = tempDir.resolve("slide.html");
+
+        DeckInput generated = service.generateEndToEnd(
+                "make a slide with a generated image of solar panels",
+                samplePath,
+                renderedPath,
+                htmlPath
+        );
+
+        SlideComponent image = generated.slides().get(0).components().get(0);
+        assertTrue(image.src().startsWith("generated-assets/images/slide_1-hero_image-"));
+        assertTrue(image.src().endsWith(".png"));
+        assertTrue(Files.exists(tempDir.resolve(image.src())));
+        assertEquals(1, imageClient.calls().size());
+        assertEquals("A cinematic illustration of futuristic solar panels", imageClient.calls().get(0).prompt());
+        assertEquals("gpt-image-2", imageClient.calls().get(0).options().model());
+        assertEquals("medium", imageClient.calls().get(0).options().quality());
+        assertEquals("1536x1024", imageClient.calls().get(0).options().size());
+        assertTrue(Files.readString(samplePath).contains("\"src\" : \"" + image.src() + "\""));
+        assertTrue(Files.readString(renderedPath).contains("\"src\" : \"" + image.src() + "\""));
+        assertTrue(Files.readString(htmlPath).contains("<img src=\"" + image.src() + "\" alt=\"Solar panels\">"));
+
+        service.generateEndToEnd(
+                "make a slide with a generated image of solar panels",
+                tempDir.resolve("sample-slide-2.json"),
+                tempDir.resolve("rendered-slide-2.json"),
+                tempDir.resolve("slide-2.html")
+        );
+
+        assertEquals(1, imageClient.calls().size());
+    }
+
+    @Test
     void retriesWhenPromptRequestedMatrixButAstDrawsItWithRectsAndText() throws Exception {
         RecordingSlideAstClient client = new RecordingSlideAstClient(manualMatrixDeck(), matrixDeck());
         PromptToSlideAstService service = service(client);
@@ -87,6 +125,25 @@ class PromptToSlideAstServiceTest {
         assertEquals(2, client.prompts().size());
         assertTrue(client.prompts().get(1).contains("Correction from the AST validator"));
         assertTrue(Files.readString(samplePath).contains("\"type\" : \"matrix\""));
+    }
+
+    @Test
+    void retriesWhenPromptRequestedChartButAstDrawsItWithRectsAndText() throws Exception {
+        RecordingSlideAstClient client = new RecordingSlideAstClient(manualChartDeck(), chartDeck());
+        PromptToSlideAstService service = service(client);
+        Path samplePath = tempDir.resolve("sample-slide.json");
+
+        DeckInput generated = service.generateSampleDeck("make a bar chart comparing adoption rates", samplePath);
+
+        SlideComponent chart = generated.slides().get(0).components().get(1);
+        assertEquals("chart", chart.type());
+        assertEquals("bar", chart.chartType());
+        assertEquals(List.of("Team A", "Team B", "Team C"), chart.labels());
+        assertEquals(List.of(30.0, 45.0, 60.0), chart.values());
+        assertEquals(2, client.prompts().size());
+        assertTrue(client.prompts().get(1).contains("Correction from the AST validator"));
+        assertTrue(client.prompts().get(1).contains("type\": \"chart\""));
+        assertTrue(Files.readString(samplePath).contains("\"type\" : \"chart\""));
     }
 
     @Test
@@ -143,6 +200,19 @@ class PromptToSlideAstServiceTest {
         );
     }
 
+    private PromptToSlideAstService service(SlideAstClient slideAstClient, ImageGeneratorClient imageGeneratorClient) {
+        return new PromptToSlideAstService(
+                slideAstClient,
+                new ComponentDeckRenderer(),
+                new SlideHtmlRenderer(),
+                MAPPER,
+                imageGeneratorClient,
+                tempDir.resolve("generated-assets/images"),
+                "gpt-image-2",
+                "medium"
+        );
+    }
+
     private static DeckInput sampleDeck() {
         return new DeckInput(
                 "Deck",
@@ -192,6 +262,30 @@ class PromptToSlideAstServiceTest {
                                 ))
                         )
                 )
+        );
+    }
+
+    private static DeckInput imageDeck() {
+        return new DeckInput(
+                "Deck",
+                new SlideSize(1280, 720),
+                List.of(new SlideSpec(
+                        "slide_1",
+                        "Slide",
+                        List.of(new SlideComponent(
+                                "hero_image",
+                                "image",
+                                null,
+                                null,
+                                null,
+                                null,
+                                "A cinematic illustration of futuristic solar panels",
+                                null,
+                                "Solar panels",
+                                new Bounds(80, 140, 640, 360),
+                                null
+                        ))
+                ))
         );
     }
 
@@ -265,6 +359,88 @@ class PromptToSlideAstServiceTest {
                                         List.of(List.of("A", "B"), List.of("C", "D")),
                                         new Bounds(160, 180, 800, 400),
                                         null
+                                )
+                        )
+                ))
+        );
+    }
+
+    private static DeckInput manualChartDeck() {
+        return new DeckInput(
+                "Deck",
+                new SlideSize(1280, 720),
+                List.of(new SlideSpec(
+                        "slide_1",
+                        "Slide",
+                        List.of(
+                                new SlideComponent(
+                                        "title",
+                                        "text",
+                                        "Manual chart",
+                                        null,
+                                        null,
+                                        null,
+                                        new Bounds(80, 48, 600, 80),
+                                        new Style(44, 700)
+                                ),
+                                new SlideComponent(
+                                        "bar-a",
+                                        "rect",
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        new Bounds(180, 420, 80, 120),
+                                        null
+                                ),
+                                new SlideComponent(
+                                        "bar-a-label",
+                                        "text",
+                                        "Team A",
+                                        null,
+                                        null,
+                                        null,
+                                        new Bounds(170, 560, 120, 40),
+                                        null
+                                )
+                        )
+                ))
+        );
+    }
+
+    private static DeckInput chartDeck() {
+        return new DeckInput(
+                "Deck",
+                new SlideSize(1280, 720),
+                List.of(new SlideSpec(
+                        "slide_1",
+                        "Slide",
+                        List.of(
+                                new SlideComponent(
+                                        "title",
+                                        "text",
+                                        "Adoption rates",
+                                        null,
+                                        null,
+                                        null,
+                                        new Bounds(80, 48, 600, 80),
+                                        new Style(44, 700)
+                                ),
+                                new SlideComponent(
+                                        "adoption_chart",
+                                        "chart",
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        "bar",
+                                        List.of("Team A", "Team B", "Team C"),
+                                        List.of(30.0, 45.0, 60.0),
+                                        new Bounds(160, 180, 800, 400),
+                                        new Style(null, null, null, "#2563eb", "#374151", 2)
                                 )
                         )
                 ))
@@ -361,6 +537,28 @@ class PromptToSlideAstServiceTest {
 
         private List<String> prompts() {
             return prompts;
+        }
+    }
+
+    private record ImageGenerationCall(String prompt, ImageGenerationOptions options) {
+    }
+
+    private static final class RecordingImageGeneratorClient implements ImageGeneratorClient {
+        private final byte[] imageBytes;
+        private final List<ImageGenerationCall> calls = new ArrayList<>();
+
+        private RecordingImageGeneratorClient(byte[] imageBytes) {
+            this.imageBytes = imageBytes;
+        }
+
+        @Override
+        public byte[] generateImage(String prompt, ImageGenerationOptions options) {
+            calls.add(new ImageGenerationCall(prompt, options));
+            return imageBytes;
+        }
+
+        private List<ImageGenerationCall> calls() {
+            return calls;
         }
     }
 }

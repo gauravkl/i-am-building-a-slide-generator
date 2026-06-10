@@ -10,11 +10,17 @@
     .deck { min-height: 100vh; padding: 32px; display: flex; flex-direction: column; align-items: center; gap: 32px; }
     .slide { position: relative; background: #ffffff; box-shadow: 0 18px 50px rgba(15, 23, 42, 0.18); overflow: hidden; }
     .object { position: absolute; }
-    .text, .bullets { color: #111827; line-height: 1.2; overflow: hidden; white-space: normal; }
+    .text, .bullets { color: #111827; line-height: 1.2; white-space: normal; }
+    .text { overflow: visible; overflow-wrap: anywhere; }
+    .bullets { overflow: hidden; }
     .bullets ul { margin: 0; padding-left: 1.2em; }
     .bullets li { margin: 0 0 0.45em; }
     .rect { background: #e5e7eb; border: 2px solid #111827; }
     .circle { background: #111827; border: 0 solid #111827; border-radius: 50%; }
+    .image { overflow: hidden; }
+    .image img { width: 100%; height: 100%; display: block; object-fit: contain; }
+    .chart svg { width: 100%; height: 100%; display: block; }
+    .chart text { font-size: 14px; fill: #111827; }
     .arrow { --stroke-color: #111827; --stroke-width: 3px; }
     .arrow-line { position: absolute; left: 0; right: 10px; top: 50%; border-top: var(--stroke-width) solid var(--stroke-color); }
     .arrow-head { position: absolute; right: -10px; top: calc(var(--stroke-width) * -2); width: 10px; height: 10px; border-top: var(--stroke-width) solid var(--stroke-color); border-right: var(--stroke-width) solid var(--stroke-color); transform: rotate(45deg); }
@@ -26,22 +32,24 @@
 </head>
 <body>
   <main class="deck">
-    <section class="slide" data-slide-id="slide-1" style="width: 1280px; height: 720px;">
-      <div class="object text" data-object-id="title-1" style="left: 60px; top: 40px; width: 520px; height: 60px; font-size: 34px; font-weight: 700; color: #0B3D91;">Why AI Slide Iteration Breaks</div>
-      <div class="object bullets" data-object-id="bul-1" style="left: 750px; top: 160px; width: 420px; height: 220px; font-size: 22px; color: #1A73E8;"><ul><li>Layout drift from partial updates</li><li>Inconsistent design rules across iterations</li></ul></div>
-      <div class="object rect" data-object-id="rect-yellow" style="left: 160px; top: 245px; width: 220px; height: 130px; background: #FFD84D; --stroke-color: #B8860B; border-color: #B8860B; --stroke-width: 3px; border-width: 3px;"></div>
-      <div class="object circle" data-object-id="circle-blue" style="left: 500px; top: 220px; width: 160px; height: 160px; background: #4D8BFF; --stroke-color: #1B3F8A; border-color: #1B3F8A; --stroke-width: 3px; border-width: 3px;"></div>
-      <div class="object arrow" data-object-id="arrow-rect-to-circle" style="left: 260px; top: 270px; width: 380px; height: 110px; --stroke-color: #1A73E8; border-color: #1A73E8; --stroke-width: 4px; border-width: 4px;"><div class="arrow-line"><span class="arrow-head"></span></div></div>
+    <section class="slide" data-slide-id="slide_1" style="width: 1280px; height: 720px;">
+      <div class="object text" data-object-id="s1_title" style="left: 70px; top: 48px; width: 620px; min-height: 64px; font-size: 44px; font-weight: 700; color: #111827;">Release Planning</div>
+      <div class="object matrix" data-object-id="s1_bullets" style="left: 90px; top: 405px; width: 1100px; height: 180px; font-size: 20px; font-weight: 400; background: #F9FAFB; --stroke-color: #D1D5DB; border-color: #D1D5DB; --stroke-width: 1px; border-width: 1px;"><table><tbody><tr><td>Align scope, milestones, and business goals</td><td>Define owners, dependencies, and decision gates</td></tr><tr><td>Validate readiness with testing, rollback, and support plans</td><td>Communicate launch timing, risks, and success metrics</td></tr></tbody></table></div>
+      <div class="object image" data-object-id="s1_image" style="left: 440px; top: 125px; width: 400px; height: 260px; --stroke-color: #D1D5DB; border-color: #D1D5DB; --stroke-width: 1px; border-width: 1px;"><img src="generated-assets/images/slide_1-s1_image-fd001ac41ba7.png" alt="Calm software launch control room with engineers monitoring release dashboards"></div>
+      <div class="object text" data-object-id="s1_caption" style="left: 90px; top: 610px; width: 1080px; min-height: 42px; font-size: 24px; font-weight: 500; color: #374151;">A strong release plan keeps teams calm when launch day arrives.</div>
     </section>
-    <section class="slide" data-slide-id="slide-2" style="width: 1280px; height: 720px;">
-      <div class="object text" data-object-id="slide2-title" style="left: 60px; top: 40px; width: 560px; height: 50px; font-size: 28px; font-weight: 700; color: #0B3D91;">1) Layout drift from partial updates</div>
-      <div class="object matrix" data-object-id="matrix-2x2" style="left: 140px; top: 160px; width: 760px; height: 360px; background: #FFFFFF; --stroke-color: #6B7C93; border-color: #6B7C93; --stroke-width: 2px; border-width: 2px;"><table><tbody><tr><td>Edits move objects incrementally, not as a whole</td><td>Text reflow changes bounds and spacing</td></tr><tr><td>Constraints are violated (alignment, margins)</td><td>Small differences compound across iterations</td></tr></tbody></table></div>
-      <div class="object text" data-object-id="slide2-note" style="left: 60px; top: 560px; width: 740px; height: 40px; font-size: 20px; color: #1A73E8;">Result: each “improvement” subtly breaks the previous version.</div>
-    </section>
-    <section class="slide" data-slide-id="slide-3" style="width: 1280px; height: 720px;">
-      <div class="object text" data-object-id="slide3-title" style="left: 60px; top: 40px; width: 640px; height: 50px; font-size: 28px; font-weight: 700; color: #0B3D91;">2) Inconsistent design rules across iterations</div>
-      <div class="object table" data-object-id="comparison-table" style="left: 150px; top: 140px; width: 980px; height: 420px; background: #FFFFFF; --stroke-color: #6B7C93; border-color: #6B7C93; --stroke-width: 2px; border-width: 2px;"><table><thead><tr><th>What changes</th><th>What you expect</th><th>What happens</th></tr></thead><tbody><tr><td>What changes</td><td>What you expect</td><td>What happens</td></tr><tr><td>Typography &amp; spacing</td><td>Stable grid, consistent scale</td><td>Fonts/sizes drift; margins widen/narrow</td></tr><tr><td>Hierarchy &amp; color</td><td>Same emphasis and contrast targets</td><td>Emphasis flips; inconsistent colors reduce readability</td></tr></tbody></table></div>
-      <div class="object text" data-object-id="slide3-note" style="left: 60px; top: 590px; width: 900px; height: 40px; font-size: 20px; color: #1A73E8;">Result: the slide’s “system” loses coherence after repeated generations.</div>
+    <section class="slide" data-slide-id="slide_2" style="width: 1280px; height: 720px;">
+      <div class="object text" data-object-id="s2_title" style="left: 70px; top: 42px; width: 720px; min-height: 56px; font-size: 40px; font-weight: 700; color: #111827;">Release Planning Process</div>
+      <div class="object rect" data-object-id="s2_plan_rect" style="left: 80px; top: 170px; width: 440px; height: 220px; background: #3B82F6; --stroke-color: #1D4ED8; border-color: #1D4ED8; --stroke-width: 2px; border-width: 2px;"></div>
+      <div class="object text" data-object-id="s2_plan_label" style="left: 190px; top: 248px; width: 220px; min-height: 64px; font-size: 34px; font-weight: 700; color: #111827;">Plan</div>
+      <div class="object arrow" data-object-id="s2_arrow_1" style="left: 525px; top: 205px; width: 45px; height: 40px; --stroke-color: #6B7280; border-color: #6B7280; --stroke-width: 4px; border-width: 4px;"><div class="arrow-line"><span class="arrow-head"></span></div></div>
+      <div class="object circle" data-object-id="s2_build_circle" style="left: 570px; top: 155px; width: 140px; height: 140px; background: #22C55E; --stroke-color: #15803D; border-color: #15803D; --stroke-width: 2px; border-width: 2px;"></div>
+      <div class="object text" data-object-id="s2_build_label" style="left: 585px; top: 202px; width: 110px; min-height: 44px; font-size: 32px; font-weight: 700; color: #111827;">Build</div>
+      <div class="object arrow" data-object-id="s2_arrow_2" style="left: 710px; top: 205px; width: 30px; height: 40px; --stroke-color: #6B7280; border-color: #6B7280; --stroke-width: 4px; border-width: 4px;"><div class="arrow-line"><span class="arrow-head"></span></div></div>
+      <div class="object circle" data-object-id="s2_launch_rect" style="left: 740px; top: 155px; width: 140px; height: 140px; background: #EF4444; --stroke-color: #C2410C; border-color: #C2410C; --stroke-width: 2px; border-width: 2px;"></div>
+      <div class="object text" data-object-id="s2_launch_label" style="left: 747px; top: 201px; width: 126px; min-height: 48px; font-size: 34px; font-weight: 700; color: #111827;">Launch</div>
+      <div class="object text" data-object-id="s2_table_title" style="left: 900px; top: 90px; width: 330px; min-height: 36px; font-size: 26px; font-weight: 700; color: #111827;">Key Release Risks</div>
+      <div class="object table" data-object-id="s2_risks_table" style="left: 900px; top: 130px; width: 340px; height: 245px; font-size: 14px; font-weight: 400; background: #F9FAFB; --stroke-color: #D1D5DB; border-color: #D1D5DB; --stroke-width: 1px; border-width: 1px;"><table><thead><tr><th>Risk</th><th>Impact</th><th>Mitigation</th></tr></thead><tbody><tr><td>Scope creep</td><td>Delayed release</td><td>Freeze criteria and change control</td></tr><tr><td>Unresolved defects</td><td>Quality issues</td><td>Entry/exit gates and triage</td></tr><tr><td>Poor communication</td><td>Launch confusion</td><td>Stakeholder updates and runbook</td></tr></tbody></table></div>
     </section>
   </main>
 </body>

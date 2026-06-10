@@ -26,11 +26,17 @@ public final class SlideHtmlRenderer {
         html.append("    .deck { min-height: 100vh; padding: 32px; display: flex; flex-direction: column; align-items: center; gap: 32px; }\n");
         html.append("    .slide { position: relative; background: #ffffff; box-shadow: 0 18px 50px rgba(15, 23, 42, 0.18); overflow: hidden; }\n");
         html.append("    .object { position: absolute; }\n");
-        html.append("    .text, .bullets { color: #111827; line-height: 1.2; overflow: hidden; white-space: normal; }\n");
+        html.append("    .text, .bullets { color: #111827; line-height: 1.2; white-space: normal; }\n");
+        html.append("    .text { overflow: visible; overflow-wrap: anywhere; }\n");
+        html.append("    .bullets { overflow: hidden; }\n");
         html.append("    .bullets ul { margin: 0; padding-left: 1.2em; }\n");
         html.append("    .bullets li { margin: 0 0 0.45em; }\n");
         html.append("    .rect { background: #e5e7eb; border: 2px solid #111827; }\n");
         html.append("    .circle { background: #111827; border: 0 solid #111827; border-radius: 50%; }\n");
+        html.append("    .image { overflow: hidden; }\n");
+        html.append("    .image img { width: 100%; height: 100%; display: block; object-fit: contain; }\n");
+        html.append("    .chart svg { width: 100%; height: 100%; display: block; }\n");
+        html.append("    .chart text { font-size: 14px; fill: #111827; }\n");
         html.append("    .arrow { --stroke-color: #111827; --stroke-width: 3px; }\n");
         html.append("    .arrow-line { position: absolute; left: 0; right: 10px; top: 50%; border-top: var(--stroke-width) solid var(--stroke-color); }\n");
         html.append("    .arrow-head { position: absolute; right: -10px; top: calc(var(--stroke-width) * -2); width: 10px; height: 10px; border-top: var(--stroke-width) solid var(--stroke-color); border-right: var(--stroke-width) solid var(--stroke-color); transform: rotate(45deg); }\n");
@@ -76,7 +82,7 @@ public final class SlideHtmlRenderer {
                 .append("\" data-object-id=\"")
                 .append(escapeAttribute(object.id()))
                 .append("\" style=\"")
-                .append(boundsStyle(bounds));
+                .append(boundsStyle(bounds, object.type()));
 
         Style style = object.style();
         if (style != null) {
@@ -86,8 +92,8 @@ public final class SlideHtmlRenderer {
             if (style.fontWeight() != null) {
                 html.append(" font-weight: ").append(style.fontWeight()).append(";");
             }
-            if (style.color() != null) {
-                html.append(" color: ").append(escapeAttribute(style.color())).append(";");
+            if (style.color() != null && supportsTextColor(object.type())) {
+                html.append(" color: ").append(escapeAttribute(textColor(style.color()))).append(";");
             }
             if (style.fillColor() != null && supportsFillColor(object.type())) {
                 html.append(" background: ").append(escapeAttribute(style.fillColor())).append(";");
@@ -109,6 +115,8 @@ public final class SlideHtmlRenderer {
             case "arrow" -> html.append("<div class=\"arrow-line\"><span class=\"arrow-head\"></span></div>");
             case "matrix" -> appendMatrix(html, object.rows());
             case "table" -> appendTable(html, object.headers(), object.rows());
+            case "image" -> appendImage(html, object);
+            case "chart" -> appendChart(html, object);
             case "rect", "circle" -> {
                 // Shape-only components have no child markup.
             }
@@ -155,15 +163,130 @@ public final class SlideHtmlRenderer {
         html.append("</tbody></table>");
     }
 
-    private static String boundsStyle(Bounds bounds) {
-        return "left: " + bounds.x() + "px;"
+    private static void appendImage(StringBuilder html, RenderObject object) {
+        html.append("<img src=\"")
+                .append(escapeAttribute(object.src()))
+                .append("\" alt=\"")
+                .append(escapeAttribute(object.alt()))
+                .append("\">");
+    }
+
+    private static void appendChart(StringBuilder html, RenderObject object) {
+        Bounds bounds = object.bounds();
+        List<String> labels = object.labels();
+        List<Double> values = object.values();
+        Style style = object.style();
+        String barFill = style != null && style.fillColor() != null ? style.fillColor() : "#2563eb";
+        String axisColor = style != null && style.strokeColor() != null ? style.strokeColor() : "#374151";
+
+        int width = bounds.w();
+        int height = bounds.h();
+        int left = Math.min(56, Math.max(36, width / 5));
+        int right = Math.min(24, Math.max(12, width / 12));
+        int top = Math.min(30, Math.max(18, height / 8));
+        int bottom = Math.min(46, Math.max(32, height / 5));
+        int plotWidth = Math.max(1, width - left - right);
+        int plotHeight = Math.max(1, height - top - bottom);
+        double maxValue = values.stream().mapToDouble(Double::doubleValue).max().orElse(0);
+        if (maxValue <= 0) {
+            maxValue = 1;
+        }
+        double slotWidth = plotWidth / (double) labels.size();
+        double barWidth = Math.max(1, slotWidth * 0.62);
+        int baseline = top + plotHeight;
+
+        html.append("<svg role=\"img\" viewBox=\"0 0 ")
+                .append(width)
+                .append(" ")
+                .append(height)
+                .append("\" aria-label=\"Bar chart\">");
+        html.append("<line x1=\"")
+                .append(left)
+                .append("\" y1=\"")
+                .append(top)
+                .append("\" x2=\"")
+                .append(left)
+                .append("\" y2=\"")
+                .append(baseline)
+                .append("\" stroke=\"")
+                .append(escapeAttribute(axisColor))
+                .append("\" stroke-width=\"2\"/>");
+        html.append("<line x1=\"")
+                .append(left)
+                .append("\" y1=\"")
+                .append(baseline)
+                .append("\" x2=\"")
+                .append(left + plotWidth)
+                .append("\" y2=\"")
+                .append(baseline)
+                .append("\" stroke=\"")
+                .append(escapeAttribute(axisColor))
+                .append("\" stroke-width=\"2\"/>");
+
+        for (int index = 0; index < labels.size(); index++) {
+            double value = values.get(index);
+            double barHeight = value / maxValue * plotHeight;
+            double x = left + index * slotWidth + (slotWidth - barWidth) / 2.0;
+            double y = baseline - barHeight;
+            double centerX = x + barWidth / 2.0;
+
+            html.append("<rect x=\"")
+                    .append(formatNumber(x))
+                    .append("\" y=\"")
+                    .append(formatNumber(y))
+                    .append("\" width=\"")
+                    .append(formatNumber(barWidth))
+                    .append("\" height=\"")
+                    .append(formatNumber(barHeight))
+                    .append("\" fill=\"")
+                    .append(escapeAttribute(barFill))
+                    .append("\"/>");
+            html.append("<text x=\"")
+                    .append(formatNumber(centerX))
+                    .append("\" y=\"")
+                    .append(formatNumber(Math.max(12, y - 6)))
+                    .append("\" text-anchor=\"middle\">")
+                    .append(escapeText(formatValue(value)))
+                    .append("</text>");
+            html.append("<text x=\"")
+                    .append(formatNumber(centerX))
+                    .append("\" y=\"")
+                    .append(baseline + 20)
+                    .append("\" text-anchor=\"middle\">")
+                    .append(escapeText(labels.get(index)))
+                    .append("</text>");
+        }
+
+        html.append("</svg>");
+    }
+
+    private static String boundsStyle(Bounds bounds, String objectType) {
+        String baseStyle = "left: " + bounds.x() + "px;"
                 + " top: " + bounds.y() + "px;"
-                + " width: " + bounds.w() + "px;"
-                + " height: " + bounds.h() + "px;";
+                + " width: " + bounds.w() + "px;";
+        if ("text".equals(objectType)) {
+            return baseStyle + " min-height: " + bounds.h() + "px;";
+        }
+        return baseStyle + " height: " + bounds.h() + "px;";
     }
 
     private static boolean supportsFillColor(String objectType) {
         return List.of("rect", "circle", "matrix", "table").contains(objectType);
+    }
+
+    private static boolean supportsTextColor(String objectType) {
+        return List.of("text", "bullets").contains(objectType);
+    }
+
+    private static String textColor(String color) {
+        if (color == null) {
+            return "#111827";
+        }
+        String normalized = color.trim().toLowerCase(java.util.Locale.ROOT);
+        if ("#fff".equals(normalized) || "#ffffff".equals(normalized) || "white".equals(normalized)) {
+            return "#111827";
+        }
+        return color;
     }
 
     private static void validate(RenderedDeck deck) {
@@ -218,7 +341,7 @@ public final class SlideHtmlRenderer {
         if (object.id() == null || object.id().isBlank()) {
             throw new SlideLayoutException("Rendered slide object id is required.");
         }
-        if (!List.of("text", "bullets", "rect", "circle", "arrow", "matrix", "table").contains(object.type())) {
+        if (!List.of("text", "bullets", "rect", "circle", "arrow", "matrix", "table", "image", "chart").contains(object.type())) {
             throw new SlideLayoutException("Unsupported render object type: " + object.type());
         }
         if (object.bounds() == null) {
@@ -245,6 +368,15 @@ public final class SlideHtmlRenderer {
                     throw new SlideLayoutException("Rendered table object requires headers and rows: " + object.id());
                 }
             }
+            case "image" -> {
+                if (object.src() == null || object.src().isBlank()) {
+                    throw new SlideLayoutException("Rendered image object requires src: " + object.id());
+                }
+                if (object.alt() == null || object.alt().isBlank()) {
+                    throw new SlideLayoutException("Rendered image object requires alt text: " + object.id());
+                }
+            }
+            case "chart" -> validateChartObject(object);
             case "rect", "circle", "arrow" -> {
                 // Shape-only objects only require id/type/bounds.
             }
@@ -262,5 +394,47 @@ public final class SlideHtmlRenderer {
     private static String escapeAttribute(String value) {
         return escapeText(value == null ? "" : value)
                 .replace("\"", "&quot;");
+    }
+
+    private static void validateChartObject(RenderObject object) {
+        if (!"bar".equals(object.chartType())) {
+            throw new SlideLayoutException("Rendered chart object supports only chartType 'bar': " + object.id());
+        }
+        if (object.labels() == null || object.labels().isEmpty()) {
+            throw new SlideLayoutException("Rendered chart object requires labels: " + object.id());
+        }
+        if (object.values() == null || object.values().isEmpty()) {
+            throw new SlideLayoutException("Rendered chart object requires values: " + object.id());
+        }
+        if (object.labels().size() != object.values().size()) {
+            throw new SlideLayoutException("Rendered chart labels and values must have the same length: " + object.id());
+        }
+        for (String label : object.labels()) {
+            if (label == null || label.isBlank()) {
+                throw new SlideLayoutException("Rendered chart labels cannot be blank: " + object.id());
+            }
+        }
+        for (Double value : object.values()) {
+            if (value == null || !Double.isFinite(value)) {
+                throw new SlideLayoutException("Rendered chart values must be finite numbers: " + object.id());
+            }
+            if (value < 0) {
+                throw new SlideLayoutException("Rendered chart values cannot be negative: " + object.id());
+            }
+        }
+    }
+
+    private static String formatNumber(double value) {
+        if (Math.rint(value) == value) {
+            return Long.toString(Math.round(value));
+        }
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
+    }
+
+    private static String formatValue(double value) {
+        if (Math.rint(value) == value) {
+            return Long.toString(Math.round(value));
+        }
+        return String.format(java.util.Locale.ROOT, "%.1f", value);
     }
 }

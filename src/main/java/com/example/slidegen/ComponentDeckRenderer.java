@@ -21,7 +21,9 @@ public final class ComponentDeckRenderer {
             "circle",
             "arrow",
             "matrix",
-            "table"
+            "table",
+            "image",
+            "chart"
     );
 
     public RenderedDeck render(DeckInput input) {
@@ -40,7 +42,7 @@ public final class ComponentDeckRenderer {
 
         List<RenderObject> objects = new ArrayList<>();
         for (SlideComponent component : slide.components()) {
-            validateComponent(size, component);
+            validateComponent(size, component, false);
             objects.add(new RenderObject(
                     component.id(),
                     component.type(),
@@ -48,12 +50,28 @@ public final class ComponentDeckRenderer {
                     component.items(),
                     component.headers(),
                     component.rows(),
+                    component.imagePrompt(),
+                    component.src(),
+                    component.alt(),
+                    component.chartType(),
+                    component.labels(),
+                    component.values(),
                     component.bounds(),
                     component.style()
             ));
         }
 
         return new RenderedSlidePage(slide.id(), "RenderedSlide", List.copyOf(objects));
+    }
+
+    public void validateForAssetGeneration(DeckInput input) {
+        validateDeck(input);
+        for (SlideSpec slide : input.slides()) {
+            validateSlide(slide);
+            for (SlideComponent component : slide.components()) {
+                validateComponent(input.size(), component, true);
+            }
+        }
     }
 
     private static void validateDeck(DeckInput input) {
@@ -89,7 +107,7 @@ public final class ComponentDeckRenderer {
         }
     }
 
-    private static void validateComponent(SlideSize size, SlideComponent component) {
+    private static void validateComponent(SlideSize size, SlideComponent component, boolean allowUnresolvedImages) {
         if (component == null) {
             throw new SlideLayoutException("Slide components cannot contain null entries.");
         }
@@ -109,6 +127,8 @@ public final class ComponentDeckRenderer {
                 requireHeaders(component);
                 requireRows(component);
             }
+            case "image" -> requireImage(component, allowUnresolvedImages);
+            case "chart" -> requireChart(component);
             case "rect", "circle", "arrow" -> {
                 // Shape components only require id/type/bounds.
             }
@@ -181,6 +201,50 @@ public final class ComponentDeckRenderer {
         }
         if ("table".equals(component.type()) && component.headers() != null && component.headers().size() != expectedColumns) {
             throw new SlideLayoutException("Table headers must match row column count: " + component.id());
+        }
+    }
+
+    private static void requireImage(SlideComponent component, boolean allowUnresolvedImages) {
+        if (component.alt() == null || component.alt().isBlank()) {
+            throw new SlideLayoutException("Image component requires alt text: " + component.id());
+        }
+        if (allowUnresolvedImages) {
+            if ((component.src() == null || component.src().isBlank())
+                    && (component.imagePrompt() == null || component.imagePrompt().isBlank())) {
+                throw new SlideLayoutException("Image component requires imagePrompt before asset generation: " + component.id());
+            }
+            return;
+        }
+        if (component.src() == null || component.src().isBlank()) {
+            throw new SlideLayoutException("Image component requires src: " + component.id());
+        }
+    }
+
+    private static void requireChart(SlideComponent component) {
+        if (!"bar".equals(component.chartType())) {
+            throw new SlideLayoutException("Chart component supports only chartType 'bar': " + component.id());
+        }
+        if (component.labels() == null || component.labels().isEmpty()) {
+            throw new SlideLayoutException("Chart component requires labels: " + component.id());
+        }
+        if (component.values() == null || component.values().isEmpty()) {
+            throw new SlideLayoutException("Chart component requires values: " + component.id());
+        }
+        if (component.labels().size() != component.values().size()) {
+            throw new SlideLayoutException("Chart labels and values must have the same length: " + component.id());
+        }
+        for (String label : component.labels()) {
+            if (label == null || label.isBlank()) {
+                throw new SlideLayoutException("Chart labels cannot be blank: " + component.id());
+            }
+        }
+        for (Double value : component.values()) {
+            if (value == null || !Double.isFinite(value)) {
+                throw new SlideLayoutException("Chart values must be finite numbers: " + component.id());
+            }
+            if (value < 0) {
+                throw new SlideLayoutException("Chart values cannot be negative: " + component.id());
+            }
         }
     }
 }

@@ -7,8 +7,11 @@ import com.example.slidegen.model.SlideSpec;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,6 +22,7 @@ import java.util.regex.Pattern;
 
 public final class PromptToSlideAstService {
     private static final int MAX_GENERATION_ATTEMPTS = 2;
+    private static final Path DEFAULT_IMAGE_ASSET_DIR = Path.of("generated-assets/images");
     private static final Pattern DIGIT_MATRIX_DIMENSIONS = Pattern.compile("(\\d+)\\s*(?:x|×|by)\\s*(\\d+)");
     private static final Pattern WORD_MATRIX_DIMENSIONS = Pattern.compile(
             "(one|two|three|four|five|six|seven|eight|nine|ten)\\s+by\\s+(one|two|three|four|five|six|seven|eight|nine|ten)"
@@ -28,6 +32,10 @@ public final class PromptToSlideAstService {
     private final ComponentDeckRenderer deckRenderer;
     private final SlideHtmlRenderer htmlRenderer;
     private final ObjectMapper objectMapper;
+    private final ImageGeneratorClient imageGeneratorClient;
+    private final Path imageAssetDir;
+    private final String imageModel;
+    private final String imageQuality;
 
     public PromptToSlideAstService(
             SlideAstClient slideAstClient,
@@ -35,10 +43,36 @@ public final class PromptToSlideAstService {
             SlideHtmlRenderer htmlRenderer,
             ObjectMapper objectMapper
     ) {
+        this(
+                slideAstClient,
+                deckRenderer,
+                htmlRenderer,
+                objectMapper,
+                ImageGeneratorClient.disabled(),
+                DEFAULT_IMAGE_ASSET_DIR,
+                OpenAiImageGeneratorClient.DEFAULT_MODEL,
+                OpenAiImageGeneratorClient.DEFAULT_QUALITY
+        );
+    }
+
+    public PromptToSlideAstService(
+            SlideAstClient slideAstClient,
+            ComponentDeckRenderer deckRenderer,
+            SlideHtmlRenderer htmlRenderer,
+            ObjectMapper objectMapper,
+            ImageGeneratorClient imageGeneratorClient,
+            Path imageAssetDir,
+            String imageModel,
+            String imageQuality
+    ) {
         this.slideAstClient = slideAstClient;
         this.deckRenderer = deckRenderer;
         this.htmlRenderer = htmlRenderer;
         this.objectMapper = objectMapper;
+        this.imageGeneratorClient = imageGeneratorClient == null ? ImageGeneratorClient.disabled() : imageGeneratorClient;
+        this.imageAssetDir = imageAssetDir == null ? DEFAULT_IMAGE_ASSET_DIR : imageAssetDir;
+        this.imageModel = imageModel == null || imageModel.isBlank() ? OpenAiImageGeneratorClient.DEFAULT_MODEL : imageModel;
+        this.imageQuality = normalizeImageQuality(imageQuality);
     }
 
     public DeckInput generateSampleDeck(String prompt, Path sampleSlidePath) throws IOException, InterruptedException {
@@ -53,7 +87,7 @@ public final class PromptToSlideAstService {
             Path renderedSlidePath,
             Path htmlPath
     ) throws IOException, InterruptedException {
-        DeckInput deckInput = generateValidatedDeck(prompt);
+        DeckInput deckInput = resolveGeneratedImages(generateValidatedDeck(prompt), htmlPath);
         RenderedDeck renderedDeck = deckRenderer.render(deckInput);
         String html = htmlRenderer.render(renderedDeck);
 
@@ -63,13 +97,83 @@ public final class PromptToSlideAstService {
         return deckInput;
     }
 
+    private DeckInput resolveGeneratedImages(DeckInput deckInput, Path htmlPath) throws IOException, InterruptedException {
+        if (deckInput == null || deckInput.slides() == null || !containsUnresolvedImage(deckInput)) {
+            return deckInput;
+        }
+
+        Path htmlDir = htmlDirectory(htmlPath);
+        Path resolvedAssetDir = resolvedImageAssetDir(htmlDir);
+        Files.createDirectories(resolvedAssetDir);
+
+        List<SlideSpec> resolvedSlides = new ArrayList<>();
+        for (SlideSpec slide : deckInput.slides()) {
+            if (slide == null || slide.components() == null) {
+                resolvedSlides.add(slide);
+                continue;
+            }
+
+            List<SlideComponent> resolvedComponents = new ArrayList<>();
+            for (SlideComponent component : slide.components()) {
+                resolvedComponents.add(resolveGeneratedImage(slide, component, htmlDir, resolvedAssetDir));
+            }
+            resolvedSlides.add(new SlideSpec(slide.id(), slide.type(), List.copyOf(resolvedComponents)));
+        }
+
+        return new DeckInput(deckInput.type(), deckInput.size(), List.copyOf(resolvedSlides));
+    }
+
+    private SlideComponent resolveGeneratedImage(
+            SlideSpec slide,
+            SlideComponent component,
+            Path htmlDir,
+            Path resolvedAssetDir
+    ) throws IOException, InterruptedException {
+        if (component == null || !"image".equals(component.type()) || (component.src() != null && !component.src().isBlank())) {
+            return component;
+        }
+
+        String prompt = requireNonBlank(component.imagePrompt(), "Image component requires imagePrompt before asset generation: " + component.id());
+        String alt = requireNonBlank(component.alt(), "Image component requires alt text: " + component.id());
+        String size = imageSize(component.bounds());
+        ImageGenerationOptions options = new ImageGenerationOptions(imageModel, imageQuality, size);
+        String hash = imageHash(prompt, options);
+        Path assetPath = resolvedAssetDir.resolve(assetFileName(slide.id(), component.id(), hash));
+        if (!Files.exists(assetPath)) {
+            Files.write(assetPath, imageGeneratorClient.generateImage(prompt, options));
+        }
+
+        return new SlideComponent(
+                component.id(),
+                component.type(),
+                component.text(),
+                component.items(),
+                component.headers(),
+                component.rows(),
+                component.imagePrompt(),
+                htmlSrc(htmlDir, assetPath),
+                alt,
+                component.bounds(),
+                component.style()
+        );
+    }
+
+    private static boolean containsUnresolvedImage(DeckInput deckInput) {
+        return deckInput.slides().stream()
+                .filter(slide -> slide != null && slide.components() != null)
+                .flatMap(slide -> slide.components().stream())
+                .anyMatch(component -> component != null
+                        && "image".equals(component.type())
+                        && (component.src() == null || component.src().isBlank()));
+    }
+
     private DeckInput generateValidatedDeck(String prompt) throws IOException, InterruptedException {
         SlideLayoutException lastIntentError = null;
         DeckInput lastDeckInput = null;
         for (int attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt++) {
             DeckInput deckInput = repairTableColumnMismatches(slideAstClient.generateDeck(attempt == 0 ? prompt : correctionPrompt(prompt, lastIntentError)));
             lastDeckInput = deckInput;
-            deckRenderer.render(deckInput);
+            deckRenderer.validateForAssetGeneration(deckInput);
             try {
                 validateRequestedComponentTypes(prompt, deckInput);
                 validateRequestedMatrixDimensions(prompt, deckInput);
@@ -82,7 +186,7 @@ public final class PromptToSlideAstService {
         if (lastDeckInput != null) {
             DeckInput repairedDeckInput = repairRequestedMatrixDimensions(prompt, repairTableColumnMismatches(lastDeckInput));
             if (repairedDeckInput != lastDeckInput) {
-                deckRenderer.render(repairedDeckInput);
+                deckRenderer.validateForAssetGeneration(repairedDeckInput);
                 validateRequestedComponentTypes(prompt, repairedDeckInput);
                 validateRequestedMatrixDimensions(prompt, repairedDeckInput);
                 return repairedDeckInput;
@@ -102,7 +206,7 @@ public final class PromptToSlideAstService {
                 + intentError.getMessage()
                 + """
 
-                Use the actual requested Core 7 component type instead of drawing it manually with rect/text pieces.
+                Use the actual requested core component type instead of drawing it manually with other pieces.
                 Examples:
                 - A requested matrix must be one component with "type": "matrix" and a "rows" array.
                 - If the prompt requested a 2x2 matrix, rows must contain exactly 2 arrays and each row must contain exactly 2 cells.
@@ -114,6 +218,9 @@ public final class PromptToSlideAstService {
                 - If a table has 3 headers, every row must have exactly 3 cells.
                 - Requested bullets must be one component with "type": "bullets" and "items".
                 - Requested arrow, circle, and rectangle shapes must use "arrow", "circle", and "rect".
+                - A requested image must be one component with "type": "image", "imagePrompt", and "alt"; Java will fill "src".
+                - A requested chart or graph must be one component with "type": "chart", "chartType": "bar", "labels", and "values".
+                - A chart must have the same number of labels and values, and every value must be a non-negative number.
                 Return only valid DeckInput JSON.
                 """;
     }
@@ -410,7 +517,100 @@ public final class PromptToSlideAstService {
         if (normalized.contains("table")) {
             requestedTypes.add("table");
         }
+        if (normalized.contains("image")
+                || normalized.contains("picture")
+                || normalized.contains("photo")
+                || normalized.contains("illustration")) {
+            requestedTypes.add("image");
+        }
+        if (normalized.contains("chart")
+                || normalized.contains("graph")
+                || normalized.contains("metric comparison")
+                || normalized.contains("values visualization")
+                || normalized.contains("bar chart")
+                || normalized.contains("trend")) {
+            requestedTypes.add("chart");
+        }
         return requestedTypes;
+    }
+
+    private static Path htmlDirectory(Path htmlPath) {
+        Path absoluteHtmlPath = htmlPath == null
+                ? Path.of("slide.html").toAbsolutePath().normalize()
+                : htmlPath.toAbsolutePath().normalize();
+        Path parent = absoluteHtmlPath.getParent();
+        return parent == null ? Path.of(".").toAbsolutePath().normalize() : parent;
+    }
+
+    private Path resolvedImageAssetDir(Path htmlDir) {
+        return imageAssetDir.isAbsolute()
+                ? imageAssetDir.normalize()
+                : htmlDir.resolve(imageAssetDir).normalize();
+    }
+
+    private static String htmlSrc(Path htmlDir, Path assetPath) {
+        Path absoluteAssetPath = assetPath.toAbsolutePath().normalize();
+        try {
+            return htmlDir.relativize(absoluteAssetPath).toString().replace('\\', '/');
+        } catch (IllegalArgumentException ex) {
+            return absoluteAssetPath.toString().replace('\\', '/');
+        }
+    }
+
+    private static String imageSize(com.example.slidegen.model.Bounds bounds) {
+        if (bounds != null && bounds.w() > bounds.h() * 1.2) {
+            return "1536x1024";
+        }
+        if (bounds != null && bounds.h() > bounds.w() * 1.2) {
+            return "1024x1536";
+        }
+        return "1024x1024";
+    }
+
+    private static String assetFileName(String slideId, String componentId, String hash) {
+        return safeFilePart(slideId) + "-" + safeFilePart(componentId) + "-" + hash + ".png";
+    }
+
+    private static String safeFilePart(String value) {
+        String safe = (value == null ? "" : value).replaceAll("[^A-Za-z0-9._-]+", "-");
+        safe = safe.replaceAll("^-+", "").replaceAll("-+$", "");
+        return safe.isBlank() ? "image" : safe;
+    }
+
+    private static String imageHash(String prompt, ImageGenerationOptions options) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String value = prompt
+                    + "\nmodel=" + options.model()
+                    + "\nquality=" + options.quality()
+                    + "\nsize=" + options.size();
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder();
+            for (int index = 0; index < 6; index++) {
+                builder.append(String.format("%02x", hash[index] & 0xff));
+            }
+            return builder.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is not available.", ex);
+        }
+    }
+
+    private static String normalizeImageQuality(String imageQuality) {
+        if (imageQuality == null || imageQuality.isBlank()) {
+            return OpenAiImageGeneratorClient.DEFAULT_QUALITY;
+        }
+        String normalized = imageQuality.toLowerCase(Locale.ROOT);
+        if (Set.of("low", "medium", "high").contains(normalized)) {
+            return normalized;
+        }
+        throw new SlideLayoutException("OPENAI_IMAGE_QUALITY must be low, medium, or high.");
+    }
+
+    private static String requireNonBlank(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new SlideLayoutException(message);
+        }
+        return value;
     }
 
     private static boolean containsComponentType(DeckInput deckInput, String requestedType) {
